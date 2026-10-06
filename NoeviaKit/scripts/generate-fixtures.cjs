@@ -2,8 +2,10 @@
 'use strict';
 // Regenerates NoeviaKit's JSON test fixtures by running the core's REAL route factories with
 // synthetic inputs, so the Swift decoders are tested against what the server actually writes.
-// No network, no database, no real account or Diary data. Run from anywhere:
-//   node clients/macos/NoeviaKit/scripts/generate-fixtures.cjs
+// No network, no database, no real account or Diary data. The server code lives in the
+// sbstndalton/noevia repo, so point this script at a checkout of it (run from anywhere):
+//   NOEVIA_REPO=/path/to/noevia node NoeviaKit/scripts/generate-fixtures.cjs
+//   node NoeviaKit/scripts/generate-fixtures.cjs --noevia /path/to/noevia
 // The password sign-in body cannot be produced this way (auth.cjs needs better-sqlite3 and
 // argon2), so auth-login-password__auth.cjs-passwordLogin.json is written by hand below from
 // auth.cjs passwordLogin()/publicUser()/issueSession(). The device sign-in bodies (#555) run the
@@ -13,8 +15,33 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
-const repo = path.resolve(__dirname, '../../../..');
-const server = path.join(repo, 'apps/web/server');
+// Resolves the noevia checkout from `--noevia <path>` (or `--noevia=<path>`) or NOEVIA_REPO.
+// There is no default: this repo does not contain the server, and guessing a sibling path
+// could silently read the wrong code.
+function resolveNoeviaRepo(argv, env) {
+  let value;
+  for (let i = 0; i < argv.length; i += 1) {
+    if (argv[i] === '--noevia') value = argv[i + 1];
+    else if (argv[i].startsWith('--noevia=')) value = argv[i].slice('--noevia='.length);
+  }
+  if (!value) value = env.NOEVIA_REPO;
+  if (!value) {
+    throw new Error('generate-fixtures: no noevia checkout given. The fixtures are produced by the '
+      + 'server code in https://github.com/sbstndalton/noevia. Clone it and run\n'
+      + '  NOEVIA_REPO=/path/to/noevia node NoeviaKit/scripts/generate-fixtures.cjs\n'
+      + 'or pass --noevia /path/to/noevia.');
+  }
+  const root = path.resolve(value);
+  const serverDir = path.join(root, 'apps/web/server');
+  if (!fs.existsSync(path.join(serverDir, 'routes/health.cjs'))) {
+    throw new Error(`generate-fixtures: ${root} does not look like a noevia checkout `
+      + `(missing apps/web/server/routes/health.cjs).`);
+  }
+  return { root, serverDir };
+}
+
+let repo;
+let server;
 const out = path.resolve(__dirname, '../Tests/NoeviaKitTests/Fixtures');
 
 const captured = [];
@@ -92,7 +119,7 @@ async function main() {
   write('error-unauthorized__http.cjs.json', { error: 'unauthorized' });
   write('error-csrf__index.cjs.json', { error: 'invalid CSRF token' });
   write('error-signin__auth.cjs-passwordLogin.json', { error: 'sign-in failed' });
-  console.log(`fixtures written to ${path.relative(repo, out)}`);
+  console.log(`fixtures written to ${out} (server code from ${repo})`);
 }
 
 // Native-client sign-in (#555). The bodies come from the REAL device-auth.cjs running on an
@@ -164,4 +191,10 @@ async function deviceFixtures(user) {
   db.close();
 }
 
+try {
+  ({ root: repo, serverDir: server } = resolveNoeviaRepo(process.argv.slice(2), process.env));
+} catch (e) {
+  console.error(e.message);
+  process.exit(2);
+}
 main().catch((e) => { console.error(e); process.exit(1); });

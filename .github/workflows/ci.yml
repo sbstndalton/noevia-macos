@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  macos-client-tests:
+    name: macOS client (NoeviaKit) tests
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: NoeviaKit
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift --version
+      # URLProtocol stubs only: no network, no server, no Keychain writes.
+      - run: swift build
+      - run: swift test
+      # The fixture generator must refuse to run without an explicit noevia checkout.
+      - name: Fixture generator requires a noevia path
+        working-directory: .
+        run: |
+          set +e
+          node NoeviaKit/scripts/generate-fixtures.cjs 2> err.txt; code=$?
+          cat err.txt
+          test "$code" = 2 && grep -q 'NOEVIA_REPO' err.txt

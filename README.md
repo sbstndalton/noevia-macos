@@ -1,8 +1,17 @@
-# Native macOS client
+# Noevia for macOS
 
-Work for [#273](https://github.com/sbstndalton/noevia/issues/273). This directory currently
+The native macOS client for [Noevia](https://github.com/sbstndalton/noevia), a self-hosted
+AI workspace. It was split out of `clients/macos/` in the noevia repo (history kept) under
+[ADR 0001](https://github.com/sbstndalton/noevia/blob/main/docs/adr-0001-rust-and-repo-split.md)
+and [#900](https://github.com/sbstndalton/noevia/issues/900).
+
+Work for [#273](https://github.com/sbstndalton/noevia/issues/273). This repo currently
 holds only **NoeviaKit**, a Swift package with a typed async client for the core's v1 API
-([api-browser-core-v1.md](../../docs/api-browser-core-v1.md)). It has no app yet.
+([api-browser-core-v1.md](https://github.com/sbstndalton/noevia/blob/main/docs/api-browser-core-v1.md)).
+It has no app yet.
+
+**Issues are tracked in [sbstndalton/noevia](https://github.com/sbstndalton/noevia/issues)**,
+not here. Agents: read [AGENTS.md](AGENTS.md) first.
 
 ## What the first slice does
 
@@ -99,20 +108,34 @@ the server's `nativeClientAuth` feature is off, the password path below is the o
 ## Build and test
 
 ```sh
-cd clients/macos/NoeviaKit
+cd NoeviaKit
 swift build
 swift test
 ```
 
 The tests use a `URLProtocol` stub and make no network calls and no Keychain writes. They
-run in CI (`macOS client (NoeviaKit) tests`) whenever `clients/macos/**` changes.
+run in CI (`macOS client (NoeviaKit) tests`, `.github/workflows/ci.yml`, on `macos-15`) on
+every push to `main` and every pull request.
 
 On a Mac that has only the Command Line Tools and no Xcode, the default SwiftPM build backend
 fails with "Unknown error parsing property list", even for an empty package. There, run
 `sh scripts/test-clt.sh` (or `swift build --build-system native`).
 
-The fixture JSON in `Tests/NoeviaKitTests/Fixtures` is named after the server file that
-produces each shape. `node scripts/generate-fixtures.cjs` regenerates the fixtures by running
+### Test fixtures
+
+The fixture JSON in `NoeviaKit/Tests/NoeviaKitTests/Fixtures` is committed (vendored) and named
+after the noevia server file that produces each shape. The tests read only these files; they
+need no noevia checkout. To regenerate them after a server contract change, point the
+generator at a checkout of [sbstndalton/noevia](https://github.com/sbstndalton/noevia) whose
+`apps/web/server` dependencies are installed (`npm ci` there):
+
+```sh
+NOEVIA_REPO=/path/to/noevia node NoeviaKit/scripts/generate-fixtures.cjs
+# or: node NoeviaKit/scripts/generate-fixtures.cjs --noevia /path/to/noevia
+```
+
+Without a path it stops with an error (exit 2) rather than guessing. Commit the regenerated
+fixtures and note the noevia commit they came from. The generator runs
 the real `routes/health.cjs`, `routes/auth.cjs` and `routes/chat-lists.cjs` factories with
 synthetic data. The device sign-in shapes come from the real `device-auth.cjs` and
 `routes/device-auth.cjs`, run on Node's built-in `node:sqlite` (Node 22.5 or later). Only the
